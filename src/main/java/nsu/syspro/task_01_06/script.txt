@@ -1,0 +1,5 @@
+NAME="DeadlockDuo"
+javac -d target/classes src/main/java/nsu/syspro/task_01_06/$NAME.java
+java -cp target/classes nsu.syspro.task_01_06.$NAME &
+PID="$!" && sleep 1
+jstack -l $PID
