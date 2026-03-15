@@ -67,7 +67,7 @@ public class TestMyReentrantLock {
                 try {
                     lock.lock();
                     int current = counter.get();    // critical section
-                    Thread.sleep(4);               // critical section
+                    Thread.sleep(4);                // critical section
                     counter.set(current + 1);       // critical section
                 } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                   finally { lock.unlock(); }
