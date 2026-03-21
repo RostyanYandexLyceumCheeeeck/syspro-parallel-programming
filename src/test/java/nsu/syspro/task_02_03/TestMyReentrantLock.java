@@ -55,13 +55,45 @@ public class TestMyReentrantLock {
         assertEquals(MyReentrantLock.MESSAGE_ERROR_UNLOCK_OTHER, exception.getMessage());
     }
 
-    /** Проверяем работоспособность при нескольких работающих потоках */
+    /** Замеряем скорость одного работающего потока (~ 8 sec 542 ms) */
+    @Test
+    public void testSpeedOneThreadLock() throws InterruptedException {
+        MyReentrantLock lock = new MyReentrantLock(factory);
+        AtomicInteger counter = new AtomicInteger(0);
+        int k = 16;
+        int numThreads = 1;
+        int itersThread = 2 << 22;  // 2 << 22 ~ 1.4 ms(google)
+
+        Runnable task = () -> {
+            for (int q = 0; q < k; q++ ) {
+                for (int i = 0; i < itersThread; i++) {
+                    try {
+                        lock.lock();
+                        int current = counter.get();    // critical section
+                        counter.set(current + 1);       // critical section
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        lock.unlock();
+                    }
+                }
+            }
+        };
+
+        Thread[] arr = new Thread[numThreads];
+        for (int i = 0; i < numThreads; i++) { arr[i] = new Thread(task); arr[i].start(); }
+        for (int i = 0; i < numThreads; i++) { arr[i].join(); }
+
+        assertEquals(k * numThreads * itersThread, counter.get());
+    }
+
+    /** Проверяем работоспособность при нескольких работающих потоках (~20 sec 527 ms) */
     @Test
     public void testMultiThreadLock() throws InterruptedException {
         MyReentrantLock lock = new MyReentrantLock(factory);
         AtomicInteger counter = new AtomicInteger(0);
-        int numThreads = 2 << 4;
-        int itersThread = 2 << 22;  // 2 << 22 ~ 1.4 milisec(google)
+        int numThreads = 2 << 2 << 2;
+        int itersThread = 2 << 22;  // 2 << 22 ~ 1.4 ms(google)
 
         Runnable task = () -> {
             for (int i = 0; i < itersThread; i++) {
@@ -69,8 +101,11 @@ public class TestMyReentrantLock {
                     lock.lock();
                     int current = counter.get();    // critical section
                     counter.set(current + 1);       // critical section
-                } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-                  finally { lock.unlock(); }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    lock.unlock();
+                }
             }
         };
 
