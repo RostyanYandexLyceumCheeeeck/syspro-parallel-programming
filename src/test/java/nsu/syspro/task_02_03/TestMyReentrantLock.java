@@ -13,15 +13,15 @@ public class TestMyReentrantLock {
     /** Попытка создать MyReentrantLock с null */
     @Test
     public void testConstructorWithNullFactory() {
-        try {
+        IllegalArgumentException exception =  assertThrows(IllegalArgumentException.class, () -> {
             new MyReentrantLock(null);
-            fail("Test failed!");
-        } catch (IllegalArgumentException e) { /* (>_<) */ }
+        });
+        assertEquals(MyReentrantLock.MESSAGE_ERROR_FACTORY_NULL, exception.getMessage());
     }
 
     /** Проверка реентерабельности */
     @Test
-    public void testManyLockAndUnlock() {
+    public void testManyLockAndUnlock() throws InterruptedException {
         MyReentrantLock lock = new MyReentrantLock(factory);
         int num = 16;
         for (int i = 0; i < num; i++) { lock.lock(); }
@@ -33,10 +33,10 @@ public class TestMyReentrantLock {
     public void testUnlockByOtherThread() throws InterruptedException {
         MyReentrantLock lock = new MyReentrantLock(factory);
         Thread otherThread = new Thread(() -> {
-            try {
+            IllegalMonitorStateException exception = assertThrows(IllegalMonitorStateException.class, () -> {
                 lock.unlock();
-                fail("Test failed!");
-            } catch (IllegalMonitorStateException e) { /* (>_<) */ }
+            });
+            assertEquals(MyReentrantLock.MESSAGE_ERROR_UNLOCK_OTHER, exception.getMessage());
         });
 
         lock.lock();
@@ -48,10 +48,11 @@ public class TestMyReentrantLock {
     @Test
     public void testUnlockWithoutLock() {
         MyReentrantLock lock = new MyReentrantLock(factory);
-        try {
+
+        IllegalMonitorStateException exception = assertThrows(IllegalMonitorStateException.class, () -> {
             lock.unlock();
-            fail("Test failed!");
-        } catch (IllegalMonitorStateException e) { /* (>_<) */ }
+        });
+        assertEquals(MyReentrantLock.MESSAGE_ERROR_UNLOCK_OTHER, exception.getMessage());
     }
 
     /** Проверяем работоспособность при нескольких работающих потоках */
@@ -59,15 +60,14 @@ public class TestMyReentrantLock {
     public void testMultiThreadLock() throws InterruptedException {
         MyReentrantLock lock = new MyReentrantLock(factory);
         AtomicInteger counter = new AtomicInteger(0);
-        int numThreads = 16;
-        int itersThread = 128;
+        int numThreads = 2 << 4;
+        int itersThread = 2 << 22;  // 2 << 22 ~ 1.4 milisec(google)
 
         Runnable task = () -> {
             for (int i = 0; i < itersThread; i++) {
                 try {
                     lock.lock();
                     int current = counter.get();    // critical section
-                    Thread.sleep(4);                // critical section
                     counter.set(current + 1);       // critical section
                 } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                   finally { lock.unlock(); }

@@ -1,6 +1,7 @@
 package nsu.syspro.task_02_03;
 
 
+
 interface NonReentrantLock {
     void lock();
     void unlock();
@@ -25,6 +26,8 @@ interface NonReentrantLockFactory {
  * </ul>
  */
 public class MyReentrantLock {
+    static String MESSAGE_ERROR_FACTORY_NULL = "factory не может быть null!";
+    static String MESSAGE_ERROR_UNLOCK_OTHER = "Другой поток удерживает блокировку!";
 
     private int counter = 0;
     private Thread owner = null;
@@ -36,7 +39,7 @@ public class MyReentrantLock {
     private static final int INITIAL_BACKOFF = 16;
 
     public MyReentrantLock(NonReentrantLockFactory factory) {
-        if (factory == null) { throw new IllegalArgumentException("factory не может быть null!"); }
+        if (factory == null) { throw new IllegalArgumentException(MESSAGE_ERROR_FACTORY_NULL); }
         this.factory = factory;
         this.key = factory.create();
     }
@@ -47,13 +50,13 @@ public class MyReentrantLock {
      * <p>Если текущий поток уже удерживает блокировку,
      * то данный метод просто увеличивает counter.</p>
      */
-    public void lock() {
+    public void lock() throws InterruptedException {
         Thread current = Thread.currentThread();
         int backoff = INITIAL_BACKOFF;
 
         for (;;) {
+            key.lock();
             try {
-                key.lock();
                 if (owner == null || owner == current) {
                     owner = current;
                     counter++;
@@ -61,7 +64,7 @@ public class MyReentrantLock {
                 }
             } finally { key.unlock(); }
 
-            try { Thread.sleep(backoff); } catch (InterruptedException e) { }
+            Thread.sleep(backoff);
             backoff = Math.min(backoff << 1, MAX_BACKOFF);
         }
     }
@@ -75,9 +78,9 @@ public class MyReentrantLock {
     public void unlock() {
         Thread current = Thread.currentThread();
 
+        key.lock();
         try {
-            key.lock();
-            if (owner != current) { throw new IllegalMonitorStateException("Другой поток удерживает блокировку!"); }
+            if (owner != current) { throw new IllegalMonitorStateException(MESSAGE_ERROR_UNLOCK_OTHER); }
 
             counter--;
             if (counter == 0) {owner = null; }
