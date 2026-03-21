@@ -1,0 +1,118 @@
+package nsu.syspro.task_02_03;
+
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Test;
+
+
+public class TestMyReentrantLock {
+    private final NonReentrantLockFactory factory = new SimpleNonReentrantLockFactory();
+
+    /** Попытка создать MyReentrantLock с null */
+    @Test
+    public void testConstructorWithNullFactory() {
+        IllegalArgumentException exception =  assertThrows(IllegalArgumentException.class, () -> {
+            new MyReentrantLock(null);
+        });
+        assertEquals(MyReentrantLock.MESSAGE_ERROR_FACTORY_NULL, exception.getMessage());
+    }
+
+    /** Проверка реентерабельности */
+    @Test
+    public void testManyLockAndUnlock() throws InterruptedException {
+        MyReentrantLock lock = new MyReentrantLock(factory);
+        int num = 16;
+        for (int i = 0; i < num; i++) { lock.lock(); }
+        for (int i = 0; i < num; i++) { lock.unlock(); }
+    }
+
+    /** Попытка разблокировать из другого потока */
+    @Test
+    public void testUnlockByOtherThread() throws InterruptedException {
+        MyReentrantLock lock = new MyReentrantLock(factory);
+        Thread otherThread = new Thread(() -> {
+            IllegalMonitorStateException exception = assertThrows(IllegalMonitorStateException.class, () -> {
+                lock.unlock();
+            });
+            assertEquals(MyReentrantLock.MESSAGE_ERROR_UNLOCK_OTHER, exception.getMessage());
+        });
+
+        lock.lock();
+        otherThread.start(); otherThread.join();
+        lock.unlock();
+    }
+
+    /** Попытка разблокировать без предварительного захвата */
+    @Test
+    public void testUnlockWithoutLock() {
+        MyReentrantLock lock = new MyReentrantLock(factory);
+
+        IllegalMonitorStateException exception = assertThrows(IllegalMonitorStateException.class, () -> {
+            lock.unlock();
+        });
+        assertEquals(MyReentrantLock.MESSAGE_ERROR_UNLOCK_OTHER, exception.getMessage());
+    }
+
+    /** Замеряем скорость одного работающего потока (~ 8 sec 542 ms) */
+    @Test
+    public void testSpeedOneThreadLock() throws InterruptedException {
+        MyReentrantLock lock = new MyReentrantLock(factory);
+        AtomicInteger counter = new AtomicInteger(0);
+        int k = 16;
+        int numThreads = 1;
+        int itersThread = 2 << 22;  // 2 << 22 ~ 1.4 ms(google)
+
+        Runnable task = () -> {
+            for (int q = 0; q < k; q++ ) {
+                for (int i = 0; i < itersThread; i++) {
+                    try {
+                        lock.lock();
+                        int current = counter.get();    // critical section
+                        counter.set(current + 1);       // critical section
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        lock.unlock();
+                    }
+                }
+            }
+        };
+
+        Thread[] arr = new Thread[numThreads];
+        for (int i = 0; i < numThreads; i++) { arr[i] = new Thread(task); arr[i].start(); }
+        for (int i = 0; i < numThreads; i++) { arr[i].join(); }
+
+        assertEquals(k * numThreads * itersThread, counter.get());
+    }
+
+    /** Проверяем работоспособность при нескольких работающих потоках (~20 sec 527 ms) */
+    @Test
+    public void testMultiThreadLock() throws InterruptedException {
+        MyReentrantLock lock = new MyReentrantLock(factory);
+        AtomicInteger counter = new AtomicInteger(0);
+        int numThreads = 2 << 2 << 2;
+        int itersThread = 2 << 22;  // 2 << 22 ~ 1.4 ms(google)
+
+        Runnable task = () -> {
+            for (int i = 0; i < itersThread; i++) {
+                try {
+                    lock.lock();
+                    int current = counter.get();    // critical section
+                    counter.set(current + 1);       // critical section
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    lock.unlock();
+                }
+            }
+        };
+
+        Thread[] arr = new Thread[numThreads];
+        for (int i = 0; i < numThreads; i++) { arr[i] = new Thread(task); arr[i].start(); }
+        for (int i = 0; i < numThreads; i++) { arr[i].join(); }
+
+        assertEquals(numThreads * itersThread, counter.get());
+    }
+}
