@@ -28,9 +28,8 @@ class CondVarFuture<V> {
      * @throws ExecutionException если вычисление вызвало исключение
      */
     public V get() throws ExecutionException {
+        lock.lock();
         try {
-            lock.lock();
-
             while (!done) { cond.await(); }
             if (err != null) { throw err; }
             return result;
@@ -47,14 +46,14 @@ class CondVarFuture<V> {
      * @return true, если задача завершена или брошено исключение, иначе false.
      */
     public boolean isDone() {
-        try { lock.lock(); return done; }
-        finally { lock.unlock(); }
+        lock.lock();
+        try { return done; } finally { lock.unlock(); }
     }
 
     /** Сохраняет результат, выставляет флаг, что задача выполнена. */
     void setResult(V result) {
+        lock.lock();
         try {
-            lock.lock();
             this.done = true;
             this.result = result;
             cond.signalAll();
@@ -63,8 +62,8 @@ class CondVarFuture<V> {
 
     /** Сохраняет исключение, выставляет флаг, что задача выполнена. */
     void setException(Throwable t) {
+        lock.lock();
         try {
-            lock.lock();
             this.done = true;
             this.err = new ExecutionException(t);
             cond.signalAll();
