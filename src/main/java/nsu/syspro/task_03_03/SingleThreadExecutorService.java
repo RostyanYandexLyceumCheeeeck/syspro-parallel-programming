@@ -25,11 +25,11 @@ class SingleThreadExecutorService {
     }
 
     /** Внутренний класс, управляющий Future. */
-    private static class RunnableFuture<V> implements Runnable {
+    private static class FutureTaskAdapter<V> implements Runnable {
         private final Callable<V> task;
         private final CondVarFuture<V> future;
 
-        public RunnableFuture(Callable<V> task, CondVarFuture<V> future) {
+        public FutureTaskAdapter(Callable<V> task, CondVarFuture<V> future) {
             this.task = task;
             this.future = future;
         }
@@ -69,7 +69,7 @@ class SingleThreadExecutorService {
      */
     public <T> CondVarFuture<T> submit(Callable<T> task) {
         CondVarFuture<T> future = new CondVarFuture<>();
-        RunnableFuture<T> futureTask = new RunnableFuture<>(task, future);
+        FutureTaskAdapter<T> futureTask = new FutureTaskAdapter<>(task, future);
 
         queue.offer(futureTask);
         return future;
