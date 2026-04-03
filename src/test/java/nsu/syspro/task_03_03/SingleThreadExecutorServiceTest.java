@@ -8,9 +8,6 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -75,7 +72,7 @@ public class SingleThreadExecutorServiceTest {
     }
 
     /**
-     *: Вызов задачи, которая бросает unchecked исключение (RuntimeException).
+     *Тест 4: Вызов задачи, которая бросает unchecked исключение (RuntimeException).
      * Рабочий поток должен завершиться, но сервис должен создать новый.
      */
     @Test
@@ -93,7 +90,7 @@ public class SingleThreadExecutorServiceTest {
         assertTrue(thrown.getCause().getMessage().contains("This thread will die now"));
 
         // Подождем немного, чтобы старый поток точно умер и начался новый
-        Thread.sleep(200);
+        // Thread.sleep(200);
 
         // Отправим новую задачу. Она должна выполниться в новом потоке.
         Callable<String> taskThatSucceeds = () -> {
@@ -129,7 +126,7 @@ public class SingleThreadExecutorServiceTest {
         ExecutionException thrown = assertThrows(ExecutionException.class, future1::get);
         assertInstanceOf(OutOfMemoryError.class, thrown.getCause());
 
-        Thread.sleep(200);
+        // Thread.sleep(200);
 
         Callable<String> taskThatSucceeds = () -> {
             thread2Id.set(Thread.currentThread().getId());
@@ -146,59 +143,37 @@ public class SingleThreadExecutorServiceTest {
     }
 
 
-    /**
-     * Проверяет, что задачи в сервисе выполняются строго последовательно в рамках одного потока.
-     *
-     * Тест имитирует длительное выполнение первой задачи и проверяет, что вторая задача
-     * не начинает выполняться параллельно (находится в очереди), а после завершения первой
-     * выполняется тем же самым потоком.
-     */
-    @Test
-    public void testSingleThreadExecutionWithConditions() throws Exception {
-        Lock lock = new ReentrantLock();
-        Condition startedTask1 = lock.newCondition();
-        Condition finishedTask1 = lock.newCondition();
+        /**
+         * Тест 6: Проверяет, что задачи в сервисе выполняются строго последовательно в рамках одного потока.
+         * <p>
+         * Тест имитирует длительное выполнение первой задачи и проверяет, что вторая задача
+         * не начинает выполняться параллельно (находится в очереди), а после завершения первой
+         * выполняется тем же самым потоком.
+         */
+        @Test
+        public void testSingleThreadExecutionWithConditions() throws Exception {
+            CountDownLatch startedTask1 = new CountDownLatch(1);
+            CountDownLatch finishedTask1 = new CountDownLatch(1);
 
-        AtomicLong thread1Id = new AtomicLong(-1);
-        AtomicLong thread2Id = new AtomicLong(-1);
+            Callable<Long> task1 = () -> {
+                    long idTask1 = Thread.currentThread().getId();
+                    startedTask1.countDown();
+                    finishedTask1.await();
+                return idTask1;
+            };
 
-        // защита от spurios wakeup
-        boolean[] flags = new boolean[2];
+            Callable<Long> task2 = () -> Thread.currentThread().getId();
 
-        Callable<Void> task1 = () -> {
-            lock.lock();
-            try {
-                flags[0] = true;
-                thread1Id.set(Thread.currentThread().getId());
-                startedTask1.signal();
+            CondVarFuture<Long> future1 = service.submit(task1);
+            CondVarFuture<Long> future2 = service.submit(task2);
 
-                while (!flags[1]) { finishedTask1.await(); }
-            } finally { lock.unlock(); }
-            return null;
-        };
+            assertTrue(startedTask1.await(35, TimeUnit.SECONDS), "task1 ещё не запустился, время ожидания вышло...");
+            assertFalse(future1.isDone());
+            assertFalse(future2.isDone());
 
-        Callable<Void> task2 = () -> {
-            thread2Id.set(Thread.currentThread().getId());
-            return null;
-        };
+            finishedTask1.countDown();
 
-        CondVarFuture<Void> future1 = service.submit(task1);
-        CondVarFuture<Void> future2 = service.submit(task2);
-
-        lock.lock();
-        try { while (!flags[0]) { startedTask1.await(); } } 
-        finally { lock.unlock(); }
-
-        assertFalse(future2.isDone());
-
-        lock.lock();
-        try { flags[1] = true; finishedTask1.signal(); } 
-        finally { lock.unlock(); }
-
-        future1.get();
-        future2.get();
-
-        assertNotEquals(-1L, thread1Id.get());
-        assertEquals(thread1Id.get(), thread2Id.get());
-    }
+            assertNotEquals(-1L, future1.get());
+            assertEquals(future1.get(), future2.get());
+        }
 }
